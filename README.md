@@ -39,7 +39,7 @@ kid-chore-tracking/
 ```bash
 cd server
 npm install
-npm start        # runs on http://localhost:5000
+npm start        # runs on http://localhost:5003
 ```
 
 ### 2. Install & start the React client (separate terminal)
@@ -47,10 +47,10 @@ npm start        # runs on http://localhost:5000
 ```bash
 cd client
 npm install
-npm start        # runs on http://localhost:3000, proxies API to :5000
+npm start        # runs on http://localhost:3000, proxies API to :5003
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+Open [http://localhost:3](http://localhost:3003) in your browser.
 
 ### API Endpoints
 
