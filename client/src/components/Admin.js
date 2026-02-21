@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getUsers, getChores, updateChoreList } from '../api';
+import { getUsers, getChores, updateChoreList, resetWeek } from '../api';
 
 const styles = {
   section: { marginBottom: 24 },
@@ -61,15 +61,28 @@ const styles = {
     marginLeft: 12,
     fontSize: 14,
   },
+  resetBtn: {
+    padding: '10px 20px',
+    background: '#e74c3c',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 6,
+    cursor: 'pointer',
+    fontSize: 14,
+    fontWeight: 700,
+    marginTop: 24,
+  },
+  resetMsg: { color: '#27ae60', marginLeft: 12, fontSize: 14 },
   loading: { color: '#aaa', padding: 20 },
 };
 
-export default function Admin() {
+export default function Admin({ user }) {
   const [kidUsers, setKidUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [chores, setChores] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
+  const [resetMsg, setResetMsg] = useState(false);
 
   useEffect(() => {
     getUsers().then(users => {
@@ -112,6 +125,20 @@ export default function Admin() {
     await updateChoreList(selectedUser, cleaned);
     setChores(cleaned);
     setSaved(true);
+  }
+
+  async function handleReset() {
+    if (!window.confirm('Reset the week? This will uncheck all chores and clear all notes.')) return;
+    const password = window.prompt('Enter admin password to confirm:');
+    if (password === null) return;
+    try {
+      await resetWeek(user.username, password);
+      setResetMsg(true);
+      setTimeout(() => setResetMsg(false), 2000);
+      if (selectedUser) await selectUser(selectedUser);
+    } catch (e) {
+      window.alert('Reset failed. Check your password and try again.');
+    }
   }
 
   return (
@@ -161,6 +188,12 @@ export default function Admin() {
               Save
             </button>
             {saved && <span style={styles.saved}>✓ Saved!</span>}
+          </div>
+          <div>
+            <button style={styles.resetBtn} onClick={handleReset}>
+              🔄 Reset Week
+            </button>
+            {resetMsg && <span style={styles.resetMsg}>✓ Week reset!</span>}
           </div>
         </>
       )}

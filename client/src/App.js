@@ -108,7 +108,7 @@ export default function App() {
       )}
 
       {view === 'admin' && user.role === 'admin' ? (
-        <Admin />
+        <Admin user={user} />
       ) : (
         <Chores user={user} />
       )}

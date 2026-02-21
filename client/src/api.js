@@ -25,3 +25,13 @@ export function updateChoreList(username, chores) {
     .post(`${BASE}/api/chores/${username}/list`, { chores })
     .then(r => r.data);
 }
+
+export function saveNote(username, note) {
+  return axios
+    .post(`${BASE}/api/notes/${username}`, { note })
+    .then(r => r.data);
+}
+
+export function resetWeek(username, password) {
+  return axios.post(`${BASE}/api/reset`, { username, password }).then(r => r.data);
+}
