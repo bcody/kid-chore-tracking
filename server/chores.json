@@ -1,0 +1,61 @@
+{
+  "users": {
+    "kid1": {
+      "password": "kid1",
+      "role": "kid"
+    },
+    "kid2": {
+      "password": "kid2",
+      "role": "kid"
+    },
+    "admin": {
+      "password": "admin",
+      "role": "admin"
+    }
+  },
+  "chores": {
+    "kid1": [
+      {
+        "id": 1,
+        "name": "Make bed"
+      },
+      {
+        "id": 2,
+        "name": "Clean room"
+      },
+      {
+        "id": 3,
+        "name": "Do homework"
+      },
+      {
+        "id": 4,
+        "name": "Brush teeth"
+      }
+    ],
+    "kid2": [
+      {
+        "id": 1,
+        "name": "Make bed"
+      },
+      {
+        "id": 2,
+        "name": "Set table"
+      },
+      {
+        "id": 3,
+        "name": "Feed pet"
+      },
+      {
+        "id": 4,
+        "name": "Brush teeth"
+      }
+    ]
+  },
+  "completions": {
+    "kid1": {
+      "2026-02-21": {
+        "1": true
+      }
+    }
+  }
+}
