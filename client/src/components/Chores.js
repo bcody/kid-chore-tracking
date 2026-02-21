@@ -1,16 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { getChores, checkChore } from '../api';
+import { getChores, checkChore, saveNote } from '../api';
 
-const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 function getWeekDates() {
   const today = new Date();
   const dayOfWeek = today.getDay(); // 0=Sun,1=Mon,...
-  const monday = new Date(today);
-  monday.setDate(today.getDate() - ((dayOfWeek + 6) % 7));
+  const sunday = new Date(today);
+  sunday.setDate(today.getDate() - dayOfWeek);
   return DAYS.map((label, i) => {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
+    const d = new Date(sunday);
+    d.setDate(sunday.getDate() + i);
     return {
       label,
       key: d.toISOString().slice(0, 10),
@@ -82,12 +82,38 @@ const styles = {
   empty: { color: '#aaa', textAlign: 'center', padding: 32 },
   loading: { color: '#aaa', textAlign: 'center', padding: 32 },
   sectionTitle: { fontSize: 18, fontWeight: 700, color: '#333', marginBottom: 10 },
+  notesSection: { marginTop: 24 },
+  notesLabel: { fontSize: 15, fontWeight: 600, color: '#333', marginBottom: 6 },
+  notesTextarea: {
+    width: '100%',
+    minHeight: 80,
+    padding: '8px 10px',
+    border: '1px solid #ccc',
+    borderRadius: 6,
+    fontSize: 14,
+    resize: 'vertical',
+    boxSizing: 'border-box',
+  },
+  notesSaveBtn: {
+    marginTop: 8,
+    padding: '7px 18px',
+    background: '#4a90d9',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 6,
+    cursor: 'pointer',
+    fontSize: 14,
+    fontWeight: 600,
+  },
+  notesSaved: { color: '#27ae60', marginLeft: 10, fontSize: 13 },
 };
 
 export default function Chores({ user }) {
   const [chores, setChores] = useState([]);
   const [completions, setCompletions] = useState({});
   const [loading, setLoading] = useState(true);
+  const [note, setNote] = useState('');
+  const [noteSaved, setNoteSaved] = useState(false);
   const weekDates = getWeekDates();
 
   const fetchChores = useCallback(async () => {
@@ -96,6 +122,7 @@ export default function Chores({ user }) {
       const data = await getChores(user.username);
       setChores(data.chores);
       setCompletions(data.completions);
+      setNote(data.note || '');
     } catch (e) {
       console.error(e);
     } finally {
@@ -122,6 +149,16 @@ export default function Chores({ user }) {
         ...prev,
         [day]: { ...prev[day], [choreId]: current },
       }));
+    }
+  }
+
+  async function handleNoteSave() {
+    try {
+      await saveNote(user.username, note);
+      setNoteSaved(true);
+      setTimeout(() => setNoteSaved(false), 2000);
+    } catch (e) {
+      console.error(e);
     }
   }
 
@@ -170,6 +207,21 @@ export default function Chores({ user }) {
           </div>
         </div>
       ))}
+      <div style={styles.notesSection}>
+        <div style={styles.notesLabel}>📝 Notes</div>
+        <textarea
+          style={styles.notesTextarea}
+          value={note}
+          onChange={e => { setNote(e.target.value); setNoteSaved(false); }}
+          placeholder="Leave a note for this week…"
+        />
+        <div>
+          <button style={styles.notesSaveBtn} onClick={handleNoteSave}>
+            Save Note
+          </button>
+          {noteSaved && <span style={styles.notesSaved}>✓ Saved!</span>}
+        </div>
+      </div>
     </div>
   );
 }

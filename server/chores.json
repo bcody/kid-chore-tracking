@@ -63,11 +63,6 @@
       }
     ]
   },
-  "completions": {
-    "kid1": {
-      "2026-02-21": {
-        "1": false
-      }
-    }
-  }
+  "completions": {},
+  "notes": {}
 }

@@ -60,7 +60,8 @@ app.get('/api/chores/:username', (req, res) => {
   const data = readData();
   const chores = data.chores[username] || [];
   const completions = data.completions[username] || {};
-  res.json({ chores, completions });
+  const note = (data.notes && data.notes[username]) || '';
+  res.json({ chores, completions, note });
 });
 
 // POST /api/chores/:username/check
@@ -89,6 +90,32 @@ app.post('/api/chores/:username/list', (req, res) => {
   const { chores } = req.body;
   const data = readData();
   data.chores[username] = chores;
+  writeData(data);
+  res.json({ ok: true });
+});
+
+// POST /api/notes/:username
+// Body: { note }
+app.post('/api/notes/:username', (req, res) => {
+  const { username } = req.params;
+  const { note } = req.body;
+  const data = readData();
+  if (!data.notes) data.notes = {};
+  data.notes[username] = note;
+  writeData(data);
+  res.json({ ok: true });
+});
+
+// POST /api/reset — clears all completions and notes (admin only)
+app.post('/api/reset', (req, res) => {
+  const { username, password } = req.body;
+  const data = readData();
+  const user = data.users[username];
+  if (!user || user.password !== password || user.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin credentials required' });
+  }
+  data.completions = {};
+  data.notes = {};
   writeData(data);
   res.json({ ok: true });
 });
