@@ -63,6 +63,13 @@
       }
     ]
   },
-  "completions": {},
+  "completions": {
+    "skc": {
+      "2026-02-21": {
+        "1": true,
+        "4": true
+      }
+    }
+  },
   "notes": {}
 }
