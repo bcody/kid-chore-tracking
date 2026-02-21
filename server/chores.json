@@ -1,11 +1,11 @@
 {
   "users": {
-    "kid1": {
-      "password": "kid1",
+    "dkc": {
+      "password": "dkc",
       "role": "kid"
     },
-    "kid2": {
-      "password": "kid2",
+    "skc": {
+      "password": "skc",
       "role": "kid"
     },
     "admin": {
@@ -14,14 +14,14 @@
     }
   },
   "chores": {
-    "kid1": [
+    "dkc": [
       {
         "id": 1,
-        "name": "Make bed"
+        "name": "Before bed, papers/toys/books off counter, couch, tables"
       },
       {
         "id": 2,
-        "name": "Clean room"
+        "name": "Clean out backpack"
       },
       {
         "id": 3,
@@ -30,31 +30,43 @@
       {
         "id": 4,
         "name": "Brush teeth"
+      },
+      {
+        "id": 5,
+        "name": "Load half the dishes into dishwasher"
+      },
+      {
+        "id": 6,
+        "name": "Put meal dishes in sink"
       }
     ],
-    "kid2": [
+    "skc": [
       {
         "id": 1,
-        "name": "Make bed"
+        "name": "Before bed, papers/toys/books off counter, couch, tables"
       },
       {
         "id": 2,
-        "name": "Set table"
-      },
-      {
-        "id": 3,
-        "name": "Feed pet"
+        "name": "Clean out backpack"
       },
       {
         "id": 4,
         "name": "Brush teeth"
+      },
+      {
+        "id": 5,
+        "name": "Empty half of dishwasher"
+      },
+      {
+        "id": 6,
+        "name": "Put meal dishes in sink"
       }
     ]
   },
   "completions": {
     "kid1": {
       "2026-02-21": {
-        "1": true
+        "1": false
       }
     }
   }

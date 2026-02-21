@@ -4,7 +4,7 @@ A simple web app for tracking kids' daily chores. Built with React (frontend) an
 
 ## Features
 
-- Login for `kid1`, `kid2`, and `admin` (password same as username)
+- Login for `dkc`, `skc`, and `admin` (password same as username)
 - Each kid sees their own chore list with a weekly day-by-day check-off grid
 - Admin can add, remove, and rename chores for each kid
 - Data persisted in `server/chores.json` (flat file — no database needed)
