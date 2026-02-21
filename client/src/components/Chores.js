@@ -3,6 +3,10 @@ import { getChores, checkChore, saveNote } from '../api';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+const RATING_CYCLE = [null, 'happy', 'neutral', 'sad'];
+const RATING_ICON = { happy: '😊', neutral: '😐', sad: '😢' };
+const RATING_VALID = new Set(['happy', 'neutral', 'sad']);
+
 function getWeekDates() {
   const today = new Date();
   const dayOfWeek = today.getDay(); // 0=Sun,1=Mon,...
@@ -75,6 +79,21 @@ const styles = {
     background: '#eafaf1',
     color: '#27ae60',
   },
+  dayBtnHappy: {
+    border: '2px solid #27ae60',
+    background: '#eafaf1',
+    color: '#27ae60',
+  },
+  dayBtnNeutral: {
+    border: '2px solid #f39c12',
+    background: '#fef9e7',
+    color: '#f39c12',
+  },
+  dayBtnSad: {
+    border: '2px solid #e74c3c',
+    background: '#fdf0ed',
+    color: '#e74c3c',
+  },
   dayBtnToday: {
     border: '2px solid #4a90d9',
   },
@@ -134,21 +153,40 @@ export default function Chores({ user }) {
     fetchChores();
   }, [fetchChores]);
 
-  async function toggle(choreId, day) {
-    const current = completions[day]?.[choreId] || false;
-    const newVal = !current;
-    setCompletions(prev => ({
-      ...prev,
-      [day]: { ...prev[day], [choreId]: newVal },
-    }));
-    try {
-      await checkChore(user.username, choreId, day, newVal);
-    } catch (e) {
-      // revert on error
+  async function toggle(choreId, day, ratingType) {
+    if (ratingType === 'rating') {
+      const current = RATING_VALID.has(completions[day]?.[choreId])
+        ? completions[day][choreId]
+        : null;
+      const idx = RATING_CYCLE.indexOf(current);
+      const newVal = RATING_CYCLE[(idx + 1) % RATING_CYCLE.length];
       setCompletions(prev => ({
         ...prev,
-        [day]: { ...prev[day], [choreId]: current },
+        [day]: { ...prev[day], [choreId]: newVal },
       }));
+      try {
+        await checkChore(user.username, choreId, day, newVal);
+      } catch (e) {
+        setCompletions(prev => ({
+          ...prev,
+          [day]: { ...prev[day], [choreId]: current },
+        }));
+      }
+    } else {
+      const current = completions[day]?.[choreId] === true;
+      const newVal = !current;
+      setCompletions(prev => ({
+        ...prev,
+        [day]: { ...prev[day], [choreId]: newVal },
+      }));
+      try {
+        await checkChore(user.username, choreId, day, newVal);
+      } catch (e) {
+        setCompletions(prev => ({
+          ...prev,
+          [day]: { ...prev[day], [choreId]: current },
+        }));
+      }
     }
   }
 
@@ -187,11 +225,32 @@ export default function Chores({ user }) {
           <div style={styles.choreName}>{chore.name}</div>
           <div style={styles.daysRow}>
             {weekDates.map(({ label, key, isToday }) => {
-              const done = completions[key]?.[chore.id] || false;
+              if (chore.ratingType === 'rating') {
+                const rating = RATING_VALID.has(completions[key]?.[chore.id])
+                  ? completions[key][chore.id]
+                  : null;
+                const ratingStyle = rating ? styles[`dayBtn${rating.charAt(0).toUpperCase() + rating.slice(1)}`] : {};
+                return (
+                  <button
+                    key={key}
+                    onClick={() => toggle(chore.id, key, 'rating')}
+                    style={{
+                      ...styles.dayBtn,
+                      ...ratingStyle,
+                      ...(isToday && !rating ? styles.dayBtnToday : {}),
+                    }}
+                    title={`${label} — ${rating ? rating.charAt(0).toUpperCase() + rating.slice(1) : 'Not rated'}`}
+                  >
+                    <span>{label}</span>
+                    <span style={styles.check}>{rating ? RATING_ICON[rating] : '○'}</span>
+                  </button>
+                );
+              }
+              const done = completions[key]?.[chore.id] === true;
               return (
                 <button
                   key={key}
-                  onClick={() => toggle(chore.id, key)}
+                  onClick={() => toggle(chore.id, key, 'binary')}
                   style={{
                     ...styles.dayBtn,
                     ...(done ? styles.dayBtnDone : {}),
