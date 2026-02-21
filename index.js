@@ -120,14 +120,17 @@ app.post('/api/reset', (req, res) => {
   res.json({ ok: true });
 });
 
-// Serve React static build in production
+// Serve React static build in production.
+// All /api/* routes are registered above, so this catch-all only matches non-API requests.
 const clientBuild = path.join(__dirname, 'client', 'build');
-if (fs.existsSync(clientBuild)) {
-  app.use(express.static(clientBuild));
-  app.get(/^(?!\/api).*$/, (req, res) => {
-    res.sendFile(path.join(clientBuild, 'index.html'));
+app.use(express.static(clientBuild));
+app.get('*', apiLimiter, (req, res) => {
+  res.sendFile(path.join(clientBuild, 'index.html'), (err) => {
+    if (err && !res.headersSent) {
+      res.status(404).send('Client build not found. Run `npm run build` inside the client directory.');
+    }
   });
-}
+});
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
