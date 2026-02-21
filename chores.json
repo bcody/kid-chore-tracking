@@ -29,7 +29,8 @@
       },
       {
         "id": 4,
-        "name": "Brush teeth"
+        "name": "Brush teeth",
+        "ratingType": "rating"
       },
       {
         "id": 5,
@@ -64,10 +65,15 @@
     ]
   },
   "completions": {
-    "skc": {
+    "dkc": {
       "2026-02-21": {
-        "1": true,
-        "4": true
+        "4": "sad"
+      },
+      "2026-02-15": {
+        "4": "happy"
+      },
+      "2026-02-16": {
+        "4": "neutral"
       }
     }
   },

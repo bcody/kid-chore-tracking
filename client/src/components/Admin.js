@@ -25,6 +25,14 @@ const styles = {
     borderRadius: 6,
     fontSize: 15,
   },
+  ratingToggleBtn: {
+    padding: '6px 10px',
+    border: '1px solid #aaa',
+    borderRadius: 6,
+    cursor: 'pointer',
+    fontSize: 12,
+    whiteSpace: 'nowrap',
+  },
   removeBtn: {
     padding: '6px 12px',
     background: '#e74c3c',
@@ -111,7 +119,18 @@ export default function Admin({ user }) {
 
   function addChore() {
     const maxId = chores.reduce((m, c) => Math.max(m, c.id || 0), 0);
-    setChores(prev => [...prev, { id: maxId + 1, name: '' }]);
+    setChores(prev => [...prev, { id: maxId + 1, name: '', ratingType: 'binary' }]);
+    setSaved(false);
+  }
+
+  function handleRatingTypeToggle(index) {
+    setChores(prev =>
+      prev.map((c, i) =>
+        i === index
+          ? { ...c, ratingType: c.ratingType === 'rating' ? 'binary' : 'rating' }
+          : c
+      )
+    );
     setSaved(false);
   }
 
@@ -173,6 +192,17 @@ export default function Admin({ user }) {
                 onChange={e => handleChoreChange(i, e.target.value)}
                 placeholder="Chore name"
               />
+              <button
+                style={{
+                  ...styles.ratingToggleBtn,
+                  background: chore.ratingType === 'rating' ? '#f39c12' : '#eee',
+                  color: chore.ratingType === 'rating' ? '#fff' : '#555',
+                }}
+                onClick={() => handleRatingTypeToggle(i)}
+                title="Toggle rating type between binary (✓/✗) and 3-tier (😊/😐/😢)"
+              >
+                {chore.ratingType === 'rating' ? '😊 Rating' : '✓ Binary'}
+              </button>
               <button style={styles.removeBtn} onClick={() => removeChore(i)}>
                 ✕
               </button>
