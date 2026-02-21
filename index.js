@@ -121,7 +121,7 @@ app.post('/api/reset', (req, res) => {
 });
 
 // Serve React static build in production
-const clientBuild = path.join(__dirname, '..', 'client', 'build');
+const clientBuild = path.join(__dirname, 'client', 'build');
 if (fs.existsSync(clientBuild)) {
   app.use(express.static(clientBuild));
   app.get(/^(?!\/api).*$/, (req, res) => {
