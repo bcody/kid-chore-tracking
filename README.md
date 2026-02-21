@@ -50,7 +50,30 @@ npm install
 npm start        # runs on http://localhost:3000, proxies API to :5003
 ```
 
-Open [http://localhost:3](http://localhost:3003) in your browser.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+## Local Production Simulation (Single Server)
+
+To simulate the production setup locally — where Express serves the built React app — run these commands:
+
+```bash
+# 1. Build the React client
+cd client
+npm install
+npm run build
+
+# 2. Start the Express server from the project root
+cd ..
+npm start        # runs on http://localhost:5003
+```
+
+Open [http://localhost:5003](http://localhost:5003) in your browser.
+
+**Routing behaviour:**
+- `/api/*` routes are handled by Express (login, chores, users, etc.)
+- All other routes (e.g. `/`, `/login`) are served by the React app from `client/build`
+
+> This mirrors exactly how the app runs on Heroku.
 
 ### API Endpoints
 
