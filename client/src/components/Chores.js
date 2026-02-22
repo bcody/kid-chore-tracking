@@ -2,16 +2,28 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { getChores, checkChore, saveNote } from '../api';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+const FIRST_WEEK_START = '2026-02-22';
 
 const RATING_CYCLE = [null, 'happy', 'neutral', 'sad'];
 const RATING_ICON = { happy: '😊', neutral: '😐', sad: '😢' };
 const RATING_VALID = new Set(['happy', 'neutral', 'sad']);
 
-function getWeekDates() {
+function getSundayOffset(offsetWeeks) {
   const today = new Date();
-  const dayOfWeek = today.getDay(); // 0=Sun,1=Mon,...
+  const dayOfWeek = today.getDay();
   const sunday = new Date(today);
-  sunday.setDate(today.getDate() - dayOfWeek);
+  sunday.setDate(today.getDate() - dayOfWeek + offsetWeeks * 7);
+  return sunday;
+}
+
+function getWeekDates(offsetWeeks = 0) {
+  const sunday = getSundayOffset(offsetWeeks);
+  const today = new Date();
   return DAYS.map((label, i) => {
     const d = new Date(sunday);
     d.setDate(sunday.getDate() + i);
@@ -23,8 +35,59 @@ function getWeekDates() {
   });
 }
 
+function humanizeWeekRange(weekDates) {
+  const first = new Date(weekDates[0].key + 'T00:00:00');
+  const last = new Date(weekDates[6].key + 'T00:00:00');
+  const startStr = `${MONTHS[first.getMonth()]} ${first.getDate()}`;
+  const endStr =
+    first.getMonth() === last.getMonth()
+      ? `${last.getDate()}`
+      : `${MONTHS[last.getMonth()]} ${last.getDate()}`;
+  return `Week of ${startStr} to ${endStr}`;
+}
+
+function getMinWeekOffset() {
+  const today = new Date();
+  const dayOfWeek = today.getDay();
+  const thisSunday = new Date(today);
+  thisSunday.setDate(today.getDate() - dayOfWeek);
+  thisSunday.setHours(0, 0, 0, 0);
+  const firstSunday = new Date(FIRST_WEEK_START + 'T00:00:00');
+  const diffMs = firstSunday.getTime() - thisSunday.getTime();
+  return Math.round(diffMs / (7 * 24 * 60 * 60 * 1000));
+}
+
 const styles = {
   section: { marginBottom: 24 },
+  weekNav: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    gap: 8,
+  },
+  weekNavBtn: {
+    padding: '6px 14px',
+    fontSize: 18,
+    background: '#f0f4fa',
+    border: '1px solid #c5d3e8',
+    borderRadius: 6,
+    cursor: 'pointer',
+    color: '#4a90d9',
+    fontWeight: 700,
+    lineHeight: 1,
+  },
+  weekNavBtnDisabled: {
+    opacity: 0.35,
+    cursor: 'default',
+  },
+  weekLabel: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 15,
+    fontWeight: 700,
+    color: '#4a90d9',
+  },
   weekRow: {
     display: 'flex',
     gap: 4,
@@ -133,12 +196,16 @@ export default function Chores({ user }) {
   const [loading, setLoading] = useState(true);
   const [note, setNote] = useState('');
   const [noteSaved, setNoteSaved] = useState(false);
-  const weekDates = getWeekDates();
+  const [weekOffset, setWeekOffset] = useState(0);
+
+  const weekDates = getWeekDates(weekOffset);
+  const weekStart = weekDates[0].key;
+  const minOffset = getMinWeekOffset();
 
   const fetchChores = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getChores(user.username);
+      const data = await getChores(user.username, weekStart);
       setChores(data.chores);
       setCompletions(data.completions);
       setNote(data.note || '');
@@ -147,7 +214,7 @@ export default function Chores({ user }) {
     } finally {
       setLoading(false);
     }
-  }, [user.username]);
+  }, [user.username, weekStart]);
 
   useEffect(() => {
     fetchChores();
@@ -201,11 +268,36 @@ export default function Chores({ user }) {
   }
 
   if (loading) return <div style={styles.loading}>Loading chores…</div>;
-  if (!chores.length) return <div style={styles.empty}>No chores yet! 🎉</div>;
+
+  const weekNav = (
+    <div style={styles.weekNav}>
+      <button
+        style={{ ...styles.weekNavBtn, ...(weekOffset <= minOffset ? styles.weekNavBtnDisabled : {}) }}
+        onClick={() => setWeekOffset(o => o - 1)}
+        disabled={weekOffset <= minOffset}
+        aria-label="Previous week"
+      >‹</button>
+      <span style={styles.weekLabel}>{humanizeWeekRange(weekDates)}</span>
+      <button
+        style={{ ...styles.weekNavBtn, ...(weekOffset >= 0 ? styles.weekNavBtnDisabled : {}) }}
+        onClick={() => setWeekOffset(o => o + 1)}
+        disabled={weekOffset >= 0}
+        aria-label="Next week"
+      >›</button>
+    </div>
+  );
+
+  if (!chores.length) return (
+    <div style={styles.section}>
+      {weekNav}
+      <div style={styles.empty}>No chores yet! 🎉</div>
+    </div>
+  );
 
   return (
     <div style={styles.section}>
       <div style={styles.sectionTitle}>📋 {user.username}'s Chores</div>
+      {weekNav}
       <div style={styles.weekRow}>
         {weekDates.map(({ label, key, isToday }) => (
           <div
