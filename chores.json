@@ -1,4 +1,10 @@
 {
+  "weeks": [
+    {
+      "startDate": "2026-02-22",
+      "frozen": false
+    }
+  ],
   "users": {
     "dkc": {
       "password": "dkc",

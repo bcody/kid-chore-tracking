@@ -54,11 +54,76 @@ app.get('/api/users', (req, res) => {
   res.json(users);
 });
 
+// GET /api/weeks
+app.get('/api/weeks', (req, res) => {
+  const data = readData();
+  const weeks = (data.weeks || []).slice().sort((a, b) =>
+    b.startDate.localeCompare(a.startDate)
+  );
+  res.json(weeks);
+});
+
+// POST /api/weeks — create a new week entry (admin only)
+// Body: { username, password, startDate }
+app.post('/api/weeks', (req, res) => {
+  const { username, password, startDate } = req.body;
+  const data = readData();
+  const user = data.users[username];
+  if (!user || user.password !== password || user.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin credentials required' });
+  }
+  if (!startDate || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+    return res.status(400).json({ error: 'Invalid startDate format (expected YYYY-MM-DD)' });
+  }
+  if (!data.weeks) data.weeks = [];
+  if (data.weeks.find(w => w.startDate === startDate)) {
+    return res.status(409).json({ error: 'Week already exists' });
+  }
+  const newWeek = { startDate, frozen: false };
+  data.weeks.push(newWeek);
+  writeData(data);
+  res.json(newWeek);
+});
+
+// POST /api/weeks/:weekStart/freeze — freeze a week, snapshotting current chore lists (admin only)
+// Body: { username, password }
+app.post('/api/weeks/:weekStart/freeze', (req, res) => {
+  const { weekStart } = req.params;
+  const { username, password } = req.body;
+  const data = readData();
+  const user = data.users[username];
+  if (!user || user.password !== password || user.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin credentials required' });
+  }
+  if (!data.weeks) {
+    return res.status(404).json({ error: 'Week not found' });
+  }
+  const week = data.weeks.find(w => w.startDate === weekStart);
+  if (!week) {
+    return res.status(404).json({ error: 'Week not found' });
+  }
+  week.frozen = true;
+  week.chores = {};
+  for (const [uname, chores] of Object.entries(data.chores)) {
+    week.chores[uname] = chores.map(c => ({ ...c }));
+  }
+  writeData(data);
+  res.json({ ok: true });
+});
+
 // GET /api/chores/:username
+// Optional query param: ?weekStart=YYYY-MM-DD — if the given week is frozen, returns the frozen chore snapshot
 app.get('/api/chores/:username', (req, res) => {
   const { username } = req.params;
+  const { weekStart } = req.query;
   const data = readData();
-  const chores = data.chores[username] || [];
+  let chores = data.chores[username] || [];
+  if (weekStart && data.weeks) {
+    const week = data.weeks.find(w => w.startDate === weekStart);
+    if (week && week.frozen && week.chores && week.chores[username]) {
+      chores = week.chores[username];
+    }
+  }
   const completions = data.completions[username] || {};
   const note = (data.notes && data.notes[username]) || '';
   res.json({ chores, completions, note });
