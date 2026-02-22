@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { getChores, checkChore, saveNote } from '../api';
+import { getChores, checkChore, saveNote, getWeeks } from '../api';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = [
@@ -46,7 +46,7 @@ function humanizeWeekRange(weekDates) {
   return `Week of ${startStr} to ${endStr}`;
 }
 
-function getMinWeekOffset() {
+function getFirstWeekOffset() {
   const today = new Date();
   const dayOfWeek = today.getDay();
   const thisSunday = new Date(today);
@@ -54,6 +54,17 @@ function getMinWeekOffset() {
   thisSunday.setHours(0, 0, 0, 0);
   const firstSunday = new Date(FIRST_WEEK_START + 'T00:00:00');
   const diffMs = firstSunday.getTime() - thisSunday.getTime();
+  return Math.round(diffMs / (7 * 24 * 60 * 60 * 1000));
+}
+
+function getWeekOffsetFromStartDate(startDate) {
+  const today = new Date();
+  const dayOfWeek = today.getDay();
+  const thisSunday = new Date(today);
+  thisSunday.setDate(today.getDate() - dayOfWeek);
+  thisSunday.setHours(0, 0, 0, 0);
+  const weekSunday = new Date(startDate + 'T00:00:00');
+  const diffMs = weekSunday.getTime() - thisSunday.getTime();
   return Math.round(diffMs / (7 * 24 * 60 * 60 * 1000));
 }
 
@@ -197,10 +208,15 @@ export default function Chores({ user }) {
   const [note, setNote] = useState('');
   const [noteSaved, setNoteSaved] = useState(false);
   const [weekOffset, setWeekOffset] = useState(0);
+  const [weekBounds, setWeekBounds] = useState(null);
 
   const weekDates = getWeekDates(weekOffset);
   const weekStart = weekDates[0].key;
-  const minOffset = getMinWeekOffset();
+  const firstWeekOffset = getFirstWeekOffset();
+  const minOffset = weekBounds ? weekBounds.min : Math.min(firstWeekOffset, 0);
+  const maxOffset = weekBounds ? weekBounds.max : Math.max(firstWeekOffset, 0);
+  const prevDisabled = weekOffset <= minOffset;
+  const nextDisabled = weekOffset >= maxOffset;
 
   const fetchChores = useCallback(async () => {
     setLoading(true);
@@ -219,6 +235,36 @@ export default function Chores({ user }) {
   useEffect(() => {
     fetchChores();
   }, [fetchChores]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchWeekBounds() {
+      try {
+        const weeks = await getWeeks();
+        if (!Array.isArray(weeks) || !weeks.length) return;
+        const offsets = weeks
+          .map(w => getWeekOffsetFromStartDate(w.startDate))
+          .filter(o => Number.isFinite(o));
+        if (!offsets.length) return;
+        if (!cancelled) {
+          setWeekBounds({
+            min: Math.min(...offsets),
+            max: Math.max(...offsets),
+          });
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    fetchWeekBounds();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    setWeekOffset(o => Math.min(maxOffset, Math.max(minOffset, o)));
+  }, [minOffset, maxOffset]);
 
   async function toggle(choreId, day, ratingType) {
     if (ratingType === 'rating') {
@@ -272,16 +318,16 @@ export default function Chores({ user }) {
   const weekNav = (
     <div style={styles.weekNav}>
       <button
-        style={{ ...styles.weekNavBtn, ...(weekOffset <= minOffset ? styles.weekNavBtnDisabled : {}) }}
+        style={{ ...styles.weekNavBtn, ...(prevDisabled ? styles.weekNavBtnDisabled : {}) }}
         onClick={() => setWeekOffset(o => o - 1)}
-        disabled={weekOffset <= minOffset}
+        disabled={prevDisabled}
         aria-label="Previous week"
       >‹</button>
       <span style={styles.weekLabel}>{humanizeWeekRange(weekDates)}</span>
       <button
-        style={{ ...styles.weekNavBtn, ...(weekOffset >= 0 ? styles.weekNavBtnDisabled : {}) }}
+        style={{ ...styles.weekNavBtn, ...(nextDisabled ? styles.weekNavBtnDisabled : {}) }}
         onClick={() => setWeekOffset(o => o + 1)}
-        disabled={weekOffset >= 0}
+        disabled={nextDisabled}
         aria-label="Next week"
       >›</button>
     </div>
