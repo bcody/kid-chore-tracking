@@ -1,12 +1,15 @@
+if (process.env.NODE_ENV !== 'production') {
+  require('dotenv').config();
+}
+
 const express = require('express');
 const cors = require('cors');
-const fs = require('fs');
 const path = require('path');
 const rateLimit = require('express-rate-limit');
+const pool = require('./db');
 
 const app = express();
 const PORT = process.env.PORT || 5003;
-const DATA_FILE = path.join(__dirname, 'chores.json');
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -19,170 +22,256 @@ app.use(cors());
 app.use(express.json());
 app.use('/api', apiLimiter);
 
-function readData() {
-  try {
-    const raw = fs.readFileSync(DATA_FILE, 'utf8');
-    return JSON.parse(raw);
-  } catch (err) {
-    console.error('Failed to read data file:', err.message);
-    throw new Error('Data store unavailable');
-  }
-}
-
-function writeData(data) {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf8');
-}
-
 // POST /api/login
-app.post('/api/login', (req, res) => {
+app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
-  const data = readData();
-  const user = data.users[username];
-  if (!user || user.password !== password) {
-    return res.status(401).json({ error: 'Invalid username or password' });
+  try {
+    const { rows } = await pool.query(
+      'SELECT username, password, role FROM users WHERE username = $1',
+      [username]
+    );
+    const user = rows[0];
+    if (!user || user.password !== password) {
+      return res.status(401).json({ error: 'Invalid username or password' });
+    }
+    res.json({ username: user.username, role: user.role });
+  } catch (err) {
+    console.error('Login error:', err);
+    res.status(500).json({ error: 'Server error' });
   }
-  res.json({ username, role: user.role });
 });
 
 // GET /api/users
-app.get('/api/users', (req, res) => {
-  const data = readData();
-  const users = Object.entries(data.users).map(([username, info]) => ({
-    username,
-    role: info.role,
-  }));
-  res.json(users);
+app.get('/api/users', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT username, role FROM users');
+    res.json(rows);
+  } catch (err) {
+    console.error('Get users error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 // GET /api/weeks
-app.get('/api/weeks', (req, res) => {
-  const data = readData();
-  const weeks = (data.weeks || []).slice().sort((a, b) =>
-    b.startDate.localeCompare(a.startDate)
-  );
-  res.json(weeks);
+app.get('/api/weeks', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT start_date AS "startDate", frozen FROM weeks ORDER BY start_date DESC'
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('Get weeks error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 // POST /api/weeks — create a new week entry (admin only)
 // Body: { username, password, startDate }
-app.post('/api/weeks', (req, res) => {
+app.post('/api/weeks', async (req, res) => {
   const { username, password, startDate } = req.body;
-  const data = readData();
-  const user = data.users[username];
-  if (!user || user.password !== password || user.role !== 'admin') {
-    return res.status(403).json({ error: 'Admin credentials required' });
+  try {
+    const { rows } = await pool.query(
+      'SELECT password, role FROM users WHERE username = $1',
+      [username]
+    );
+    const user = rows[0];
+    if (!user || user.password !== password || user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin credentials required' });
+    }
+    if (!startDate || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+      return res.status(400).json({ error: 'Invalid startDate format (expected YYYY-MM-DD)' });
+    }
+    try {
+      await pool.query(
+        'INSERT INTO weeks (start_date, frozen) VALUES ($1, FALSE)',
+        [startDate]
+      );
+    } catch (insertErr) {
+      if (insertErr.code === '23505') {
+        return res.status(409).json({ error: 'Week already exists' });
+      }
+      throw insertErr;
+    }
+    res.json({ startDate, frozen: false });
+  } catch (err) {
+    console.error('Create week error:', err);
+    res.status(500).json({ error: 'Server error' });
   }
-  if (!startDate || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
-    return res.status(400).json({ error: 'Invalid startDate format (expected YYYY-MM-DD)' });
-  }
-  if (!data.weeks) data.weeks = [];
-  if (data.weeks.find(w => w.startDate === startDate)) {
-    return res.status(409).json({ error: 'Week already exists' });
-  }
-  const newWeek = { startDate, frozen: false };
-  data.weeks.push(newWeek);
-  writeData(data);
-  res.json(newWeek);
 });
 
 // POST /api/weeks/:weekStart/freeze — freeze a week, snapshotting current chore lists (admin only)
 // Body: { username, password }
-app.post('/api/weeks/:weekStart/freeze', (req, res) => {
+app.post('/api/weeks/:weekStart/freeze', async (req, res) => {
   const { weekStart } = req.params;
   const { username, password } = req.body;
-  const data = readData();
-  const user = data.users[username];
-  if (!user || user.password !== password || user.role !== 'admin') {
-    return res.status(403).json({ error: 'Admin credentials required' });
+  try {
+    const userResult = await pool.query(
+      'SELECT password, role FROM users WHERE username = $1',
+      [username]
+    );
+    const user = userResult.rows[0];
+    if (!user || user.password !== password || user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin credentials required' });
+    }
+    const weekResult = await pool.query(
+      'SELECT start_date FROM weeks WHERE start_date = $1',
+      [weekStart]
+    );
+    if (weekResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Week not found' });
+    }
+    const choresResult = await pool.query(
+      'SELECT username, chore_id, name, rating_type FROM chores ORDER BY username, chore_id'
+    );
+    const choresSnapshot = {};
+    for (const row of choresResult.rows) {
+      if (!choresSnapshot[row.username]) choresSnapshot[row.username] = [];
+      const chore = { id: row.chore_id, name: row.name };
+      if (row.rating_type !== 'binary') chore.ratingType = row.rating_type;
+      choresSnapshot[row.username].push(chore);
+    }
+    await pool.query(
+      'UPDATE weeks SET frozen = TRUE, chores_snapshot = $1 WHERE start_date = $2',
+      [JSON.stringify(choresSnapshot), weekStart]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Freeze week error:', err);
+    res.status(500).json({ error: 'Server error' });
   }
-  if (!data.weeks) {
-    return res.status(404).json({ error: 'Week not found' });
-  }
-  const week = data.weeks.find(w => w.startDate === weekStart);
-  if (!week) {
-    return res.status(404).json({ error: 'Week not found' });
-  }
-  week.frozen = true;
-  week.chores = {};
-  for (const [uname, chores] of Object.entries(data.chores)) {
-    week.chores[uname] = chores.map(c => ({ ...c }));
-  }
-  writeData(data);
-  res.json({ ok: true });
 });
 
 // GET /api/chores/:username
 // Optional query param: ?weekStart=YYYY-MM-DD — if the given week is frozen, returns the frozen chore snapshot
-app.get('/api/chores/:username', (req, res) => {
+app.get('/api/chores/:username', async (req, res) => {
   const { username } = req.params;
   const { weekStart } = req.query;
-  const data = readData();
-  let chores = data.chores[username] || [];
-  if (weekStart && data.weeks) {
-    const week = data.weeks.find(w => w.startDate === weekStart);
-    if (week && week.frozen && week.chores && week.chores[username]) {
-      chores = week.chores[username];
+  try {
+    let chores;
+    if (weekStart) {
+      const weekResult = await pool.query(
+        'SELECT frozen, chores_snapshot FROM weeks WHERE start_date = $1',
+        [weekStart]
+      );
+      const week = weekResult.rows[0];
+      if (week && week.frozen && week.chores_snapshot && week.chores_snapshot[username]) {
+        chores = week.chores_snapshot[username];
+      }
     }
+    if (!chores) {
+      const choresResult = await pool.query(
+        'SELECT chore_id, name, rating_type FROM chores WHERE username = $1 ORDER BY chore_id',
+        [username]
+      );
+      chores = choresResult.rows.map(r => {
+        const chore = { id: r.chore_id, name: r.name };
+        if (r.rating_type !== 'binary') chore.ratingType = r.rating_type;
+        return chore;
+      });
+    }
+    const completionsResult = await pool.query(
+      'SELECT day, chore_id, completed FROM completions WHERE username = $1',
+      [username]
+    );
+    const completions = {};
+    for (const row of completionsResult.rows) {
+      if (!completions[row.day]) completions[row.day] = {};
+      completions[row.day][row.chore_id] = row.completed;
+    }
+    const noteResult = await pool.query(
+      'SELECT note FROM notes WHERE username = $1',
+      [username]
+    );
+    const note = noteResult.rows[0] ? noteResult.rows[0].note : '';
+    res.json({ chores, completions, note });
+  } catch (err) {
+    console.error('Get chores error:', err);
+    res.status(500).json({ error: 'Server error' });
   }
-  const completions = data.completions[username] || {};
-  const note = (data.notes && data.notes[username]) || '';
-  res.json({ chores, completions, note });
 });
 
 // POST /api/chores/:username/check
 // Body: { choreId, day, completed }
-app.post('/api/chores/:username/check', (req, res) => {
+app.post('/api/chores/:username/check', async (req, res) => {
   const { username } = req.params;
   const { choreId, day, completed } = req.body;
-  const data = readData();
-
-  if (!data.completions[username]) {
-    data.completions[username] = {};
+  try {
+    await pool.query(
+      `INSERT INTO completions (username, day, chore_id, completed)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (username, day, chore_id) DO UPDATE SET completed = EXCLUDED.completed`,
+      [username, day, choreId, JSON.stringify(completed)]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Check chore error:', err);
+    res.status(500).json({ error: 'Server error' });
   }
-  if (!data.completions[username][day]) {
-    data.completions[username][day] = {};
-  }
-  data.completions[username][day][choreId] = completed;
-
-  writeData(data);
-  res.json({ ok: true });
 });
 
 // POST /api/chores/:username/list
 // Body: { chores: [ { id, name }, ... ] }
-app.post('/api/chores/:username/list', (req, res) => {
+app.post('/api/chores/:username/list', async (req, res) => {
   const { username } = req.params;
   const { chores } = req.body;
-  const data = readData();
-  data.chores[username] = chores;
-  writeData(data);
-  res.json({ ok: true });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM chores WHERE username = $1', [username]);
+    for (const chore of chores) {
+      await client.query(
+        'INSERT INTO chores (username, chore_id, name, rating_type) VALUES ($1, $2, $3, $4)',
+        [username, chore.id, chore.name, chore.ratingType || 'binary']
+      );
+    }
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Update chore list error:', err);
+    res.status(500).json({ error: 'Server error' });
+  } finally {
+    client.release();
+  }
 });
 
 // POST /api/notes/:username
 // Body: { note }
-app.post('/api/notes/:username', (req, res) => {
+app.post('/api/notes/:username', async (req, res) => {
   const { username } = req.params;
   const { note } = req.body;
-  const data = readData();
-  if (!data.notes) data.notes = {};
-  data.notes[username] = note;
-  writeData(data);
-  res.json({ ok: true });
+  try {
+    await pool.query(
+      `INSERT INTO notes (username, note) VALUES ($1, $2)
+       ON CONFLICT (username) DO UPDATE SET note = EXCLUDED.note`,
+      [username, note]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Save note error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 // POST /api/reset — clears all completions and notes (admin only)
-app.post('/api/reset', (req, res) => {
+app.post('/api/reset', async (req, res) => {
   const { username, password } = req.body;
-  const data = readData();
-  const user = data.users[username];
-  if (!user || user.password !== password || user.role !== 'admin') {
-    return res.status(403).json({ error: 'Admin credentials required' });
+  try {
+    const { rows } = await pool.query(
+      'SELECT password, role FROM users WHERE username = $1',
+      [username]
+    );
+    const user = rows[0];
+    if (!user || user.password !== password || user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin credentials required' });
+    }
+    await pool.query('DELETE FROM completions');
+    await pool.query('DELETE FROM notes');
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Reset error:', err);
+    res.status(500).json({ error: 'Server error' });
   }
-  data.completions = {};
-  data.notes = {};
-  writeData(data);
-  res.json({ ok: true });
 });
 
 // Serve React static build in production.

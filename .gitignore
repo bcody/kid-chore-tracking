@@ -12,3 +12,11 @@ client/build/
 # editor
 .DS_Store
 .vscode/
+
+# Backups (local only)
+backups/*.json
+backups/*.dump
+backups/*.sql
+
+# Old flat-file data store (no longer used, but just in case)
+chores.json

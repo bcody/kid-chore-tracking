@@ -7,7 +7,7 @@ A simple web app for tracking kids' daily chores. Built with React (frontend) an
 - Login for `dkc`, `skc`, and `admin` (password same as username)
 - Each kid sees their own chore list with a weekly day-by-day check-off grid
 - Admin can add, remove, and rename chores for each kid
-- Data persisted in `server/chores.json` (flat file — no database needed)
+- Data persisted in **Heroku Postgres** (PostgreSQL via the `pg` package)
 
 ## Project Structure
 
@@ -115,8 +115,83 @@ heroku buildpacks:add heroku/nodejs
 git push heroku main
 ```
 
-The `Procfile` inside `server/` tells Heroku to run `node index.js`.
+The `Procfile` tells Heroku to run `node db-init.js` on every release (to create tables and seed initial data) and `node index.js` to start the web server.
 
-> **Note:** The `server/chores.json` file is used as the data store. On Heroku's ephemeral filesystem, data will reset on dyno restart. For persistence, replace the file-based store with a database (e.g., PostgreSQL via `pg`).
+> **Security Note:** Passwords are stored in plain text and authentication is intentionally minimal. **Do not use real passwords** — this app is intended for home/local use only. For any public deployment, add proper password hashing (e.g., bcrypt) and session management.
 
-> **Security Note:** Passwords are stored in plain text in `chores.json` and authentication is intentionally minimal. **Do not use real passwords** — this app is intended for home/local use only. For any public deployment, add proper password hashing (e.g., bcrypt) and session management.
+---
+
+## Database Management
+
+### Overview
+
+Data is stored in **Heroku Postgres** (via the `pg` npm package). Previously the app used a flat file (`chores.json`) on the server filesystem, but Heroku's ephemeral filesystem resets that file on every deploy or dyno restart, causing data loss. PostgreSQL persists across deploys.
+
+### Local Setup
+
+1. **Install PostgreSQL** locally (e.g. `brew install postgresql` on macOS).
+2. **Copy `.env.example` to `.env`** and fill in your values:
+   ```bash
+   cp .env.example .env
+   ```
+3. **Create the local database:**
+   ```bash
+   createdb kid_chores_dev
+   ```
+4. **Create tables and seed initial data:**
+   ```bash
+   node db-init.js
+   ```
+
+### Heroku Setup
+
+1. **Add the Heroku Postgres add-on:**
+   ```bash
+   heroku addons:create heroku-postgresql:essential-0 --app <your-app>
+   ```
+2. The `Procfile` `release` step runs `node db-init.js` automatically on every deploy, creating tables and seeding the initial users if they don't exist yet.
+
+### Workflow Checklist
+
+- [ ] Never commit `.env`
+- [ ] Always back up production before pushing data changes
+- [ ] Use `scripts/backup-prod.sh` before every production deploy that touches data
+- [ ] Use `scripts/export-prod-json.js` to inspect production data locally
+- [ ] Use `scripts/import-json.js` to seed local DB from a prod export
+- [ ] Test schema changes locally before deploying
+
+### Pulling Production Data Locally
+
+```bash
+# 1. Back up production database to a local SQL file
+./scripts/backup-prod.sh <your-app>
+
+# 2. Restore the dump to your local database
+./scripts/restore-local.sh backups/backup-<timestamp>.sql
+
+# — or — export as JSON for inspection without a full DB restore
+DATABASE_URL=$(heroku config:get DATABASE_URL --app <your-app>) node scripts/export-prod-json.js
+# Output will be saved to backups/prod-export-<timestamp>.json
+
+# Import a JSON export into the local DB
+DATABASE_URL=postgres://localhost/kid_chores_dev node scripts/import-json.js backups/prod-export-<timestamp>.json
+```
+
+### Pushing Data to Production
+
+> ⚠️ **This will OVERWRITE all production data.** Always back up first.
+
+```bash
+./scripts/backup-prod.sh <your-app>
+./scripts/push-to-prod.sh --confirm <your-app>
+```
+
+### Connecting with a GUI
+
+Tools like [TablePlus](https://tableplus.com/), [Postico](https://eggerapps.at/postico/), or [DBeaver](https://dbeaver.io/) can connect directly to your Heroku Postgres database.
+
+Get the connection string:
+```bash
+heroku config:get DATABASE_URL --app <your-app>
+```
+Paste that URL into your GUI client's connection dialog.
